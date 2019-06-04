@@ -1,0 +1,166 @@
+---
+title: "Wine"
+author: "Nathania"
+date: "June 2, 2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+### Introduction
+The white wine dataset contains a physicochemical properties and quality ratings.  Each wine sample comes with a quality rating from three to ten, and results from several physical chemical tests, such as: alcohol content, acidity level and residual sugar, etc. There are 11 columns describing their chemical properties, and a column for quality ratings.The objectives to build a predict the quality of the wine.
+
+##### Description of features:
+
+1 - fixed acidity: most acids involved with wine or fixed or nonvolatile (do not evaporate readily)
+
+2 - volatile acidity: the amount of acetic acid in wine, which at too high of levels can lead to an unpleasant, vinegar taste
+
+3 - citric acid: found in small quantities, citric acid can add 'freshness' and flavor to wines
+
+4 - residual sugar: the amount of sugar remaining after fermentation stops, it's rare to find wines with less than 1 gram/liter and wines with greater than 45 grams/liter are considered sweet
+
+5 - chlorides: the amount of salt in the wine
+
+6 - free sulfur dioxide: the free form of SO2 exists in equilibrium between molecular SO2 (as a dissolved gas) and bisulfite ion; it prevents microbial growth and the oxidation of wine
+
+7 - total sulfur dioxide: amount of free and bound forms of S02; in low concentrations, SO2 is mostly undetectable in wine, but at free SO2 concentrations over 50 ppm, SO2 becomes evident in the nose and taste of wine
+
+8 - density: the density of water is close to that of water depending on the percent alcohol and sugar content
+
+9 - pH: describes how acidic or basic a wine is on a scale from 0 (very acidic) to 14 (very basic); most wines are between 3-4 on the pH scale
+
+10 - sulphates: a wine additive which can contribute to sulfur dioxide gas (S02) levels, wich acts as an antimicrobial and antioxidant
+
+11 - alcohol: the percent alcohol content of the wine
+
+Output va (based on sensory data):
+
+12 - quality (score between 3 and 9)
+
+The objectives is to discover which of these chemical propeties influence the quality of wine and to understand how these characteristics influence the quality.At the end, we will create a model to predict the quality of wine.
+
+```{r}
+library(ggplot2)
+library(gridExtra)
+library(grid)
+library(dplyr)
+library(reshape2)
+library(GGally)
+library(scales)
+library(ggpubr)
+library(memisc)
+library(caret)
+library(tidyverse)
+```
+
+#### Model
+
+There are 4 algorithm which will be used and evaluated, such as Classification and Regression Trees (CART). k-Nearest Neighbors (kNN). Support Vector Machines (SVM) with a linear kernel. Random Forest (RF)
+
+The range of wine quality is 3-9, which will divide into three levels, [high, medium, low]. The validation set is about 20% from the dataset. We'll perform 10 cross validation on validation set.
+
+```{r}
+#Classification model
+
+#Use a copy of the original data set
+wine <-read.csv('winequality-white.csv', sep=';')
+
+
+
+wine$quality_levels <- cut(wine$quality, breaks = c(3, 4, 6, 9),
+                            labels = c('low','medium', 'high')) 
+
+
+# create a list of 80% of the rows in the original dataset we can use for training
+validation_index <- createDataPartition(wine$quality_levels, 
+                                        p = 0.80, list = FALSE)
+
+# select 20% of the data for validation
+validation <- wine[-validation_index,]
+
+# use the remaining 80% of data to training and testing the models
+wine1 <- wine[validation_index,]
+str(wine)
+
+```
+
+```{r}
+#Active packages
+library(memisc)
+library(RColorBrewer)
+library(caret)
+library(ggpubr)
+library(magrittr)
+```
+
+```{r}
+# Run algorithms using 10-fold cross validation
+control <- trainControl(method ="cv", number = 10)
+metric <- "Accuracy"
+```
+
+
+```{r}
+# a) nonlinear algorithms
+
+# CART
+fit.cart <- train(quality_levels ~., data = wine, metric = metric, 
+                  method="rpart", trControl = control, 
+                  na.action=na.exclude) 
+                  
+# kNN
+fit.knn <- train(quality_levels~., data = wine, metric = metric, 
+                 method="knn", trControl = control, 
+                 na.action = na.exclude)
+                 
+
+# b) advanced algorithms
+
+# SVM
+fit.svm <- train(quality_levels~., data = wine, method ="svmRadial", 
+                 trControl = control, na.action = na.exclude)
+# Random Forest
+fit.rf <- train(quality_levels~., data = wine, method ="rf",  
+                trControl=control, na.action = na.exclude)
+
+```
+
+
+##### Evaluate the Best Model
+```{r}
+# summarize accuracy of models
+results <- resamples(list(cart = fit.cart, knn = fit.knn, 
+                          svm = fit.svm, rf = fit.rf))
+summary(results)
+```
+CART and RF models achieve 100% accuracy. Now, I will summarize both models to figure out which one is the best.
+
+##### Summarize the Best Model
+```{r}
+# summarize Best Model
+print(fit.cart)
+
+print(fit.rf)
+
+```
+It seems that the random forest model was more accurate than the classification and regression trees model.
+
+##### Generate Predictions
+The RF was the most accurate model.Therefore, we'll apply it to the validation set, i.e. 20% from the wine dataset and used confusion matrix as metric evaluator.
+
+```{r}
+# estimate skill of RF on the validation dataset
+predictions <- predict(fit.rf, validation)
+confusionMatrix(predictions, validation$quality_levels)
+
+dim(validation)
+```
+Our model gets 100% accuracy in the test with the validation set. It is important to remember that the validation only contains a small part (20%) of our original dataset. This explains why our accuracy was so high. We need to test this model in other wine data sets to evaluate if it is a reliably accurate mode
+
+```{r}
+predtb <- cbind.data.frame(predictions, validation$quality_levels)
+colnames(predtb) <- c('predictions', 'actual')
+predtb[1:30,]
+```
